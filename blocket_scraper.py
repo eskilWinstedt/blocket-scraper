@@ -2,6 +2,7 @@ import urllib.request
 from bs4 import BeautifulSoup
 import time
 import os
+import pickle
 
 # To do:
 # *See when ads are removed
@@ -9,6 +10,8 @@ import os
 # 
 #
 
+def format2filename(filename):
+    return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
 
 class Ad:
     def __init__(self):
@@ -25,9 +28,12 @@ class Monitored_category:
         # This is used to download the website
         self.url = url
         self.headers = {}
+        self.filename = format2filename(url)
         
+
         self.active_ad_links = []
         self.removed_ad_links = []
+        self.load()
         self.fetch_all()
         self.update_ad_links()
 
@@ -75,13 +81,26 @@ class Monitored_category:
             self.active_ad_links.remove(removed_link)
 
     def save(self):
-        file = open('resources/monitored_category_{}.txt'.format(self.name))
+        file = open('resources/monitored_category_{}.txt'.format(self.filename), 'wb')       # wb works for pickle.dump()
+
+        file.seek(0)        # Clears
+        file.truncate()     # the file
+
+        file_content = {
+            'active_ad_links': self.active_ad_links,
+            'removed_ad_links': self.removed_ad_links
+        }
+
+        pickle.dump(file_content, file)
+
+    def load(self):
+        '''Loads saved file'''
+        if os.path.isfile(self.filename):
+            file = open('resources/monitored_category_{}.txt'.format(self.filename), 'rb')
+            file_content = pickle.load(file)
+            self.active_ad_links = file_content['active_ad_links']
+            self.removed_ad_links =  file_content['removed_ad_links']
 '''
-	def save(self):
-		file = open('resources/saved_settings.txt', 'w+')
-		deleteFileContent(file)
-		file.write(str(self.settings))
-		file.close()
 	def loadSettings(self):
 		if checkFileExisting('resources/saved_settings.txt'):
 			file = open('resources/saved_settings.txt', 'r')
@@ -109,6 +128,7 @@ while True:
     for new_ad_link in bugs.new_ad_links:
         os.system('start chrome beta.blocket.se' + new_ad_link)
         break
+    bugs.save()
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
     print('Number of ads: ' + str(len(bugs.active_ad_links)))
