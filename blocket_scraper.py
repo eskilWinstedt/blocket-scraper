@@ -21,21 +21,30 @@ class Ad:
 
 
 class Monitored_category:
-    def __init__(self, url, headers = {}):
+    def __init__(self, name, url):
         # This is used to download the website
+        self.name = name    # Used to save and load data 
         self.url = url
-        self.headers = headers
+        self.headers = {}
         
-        self.ad_links = []
+        self.active_ad_links = []
         self.removed_ad_links = []
         self.fetch_all()
         self.update_ad_links()
-    
+
     def fetch(self, url):
         '''Takes an url to a page as the argument, fetches the page and returns it as a soup'''
-        request = urllib.request.Request(url, headers = self.headers)
-        html = urllib.request.urlopen(request)
-        return BeautifulSoup(html)
+        while True:
+            try:
+                request = urllib.request.Request(url, headers = self.headers)
+                html = urllib.request.urlopen(request)
+                return BeautifulSoup(html)
+                break
+            except Exception as e:
+                print("An error occured during fetching. Retrying in 30 seconds")
+                print("Exception: " + str(e))
+                time.sleep(30)
+            
     
     def fetch_all(self):
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
@@ -52,26 +61,49 @@ class Monitored_category:
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
         self.new_ad_links = []
-        self.newly_removed_ad_links = self.ad_links.copy()        # Don't pass the reference
+        self.newly_removed_ad_links = self.active_ad_links.copy()        # Don't pass the reference
         for page_soup in self.page_soups:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
-                if not (ad['to'] in self.ad_links):       # Attribute 'to' is the relative link to the ad
-                    self.ad_links.append(ad['to'])
+                if not (ad['to'] in self.active_ad_links):       # Attribute 'to' is the relative link to the ad
+                    self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
                 else:
                     self.newly_removed_ad_links.remove(ad['to'])
+                    self.active_ad_links.remove(ad['to'])
         self.removed_ad_links += self.newly_removed_ad_links
+
+
+'''
+	def save(self):
+		file = open('resources/saved_settings.txt', 'w+')
+		deleteFileContent(file)
+		file.write(str(self.settings))
+		file.close()
+	def loadSettings(self):
+		if checkFileExisting('resources/saved_settings.txt'):
+			file = open('resources/saved_settings.txt', 'r')
+			self.savedSettings = file.read()
+			try: 
+				self.settings = eval(self.savedSettings)
+			except Exception as e:
+				print('Exeption: ' + str(e))
+			self.updateDisplayDimensions()
+			return False
+		else:
+			return True
+'''
 
 
 
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
+bugs = Monitored_category('bugs', 'https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
 
 
 update_delay = 7 * 60   # Seconds
 
 while True:
+    
     bugs.fetch_all()
     bugs.update_ad_links()
     for new_ad_link in bugs.new_ad_links:
