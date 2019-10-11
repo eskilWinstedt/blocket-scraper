@@ -21,9 +21,8 @@ class Ad:
 
 
 class Monitored_category:
-    def __init__(self, name, url):
+    def __init__(self, url):
         # This is used to download the website
-        self.name = name    # Used to save and load data 
         self.url = url
         self.headers = {}
         
@@ -61,18 +60,22 @@ class Monitored_category:
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
         self.new_ad_links = []
-        self.newly_removed_ad_links = self.active_ad_links.copy()        # Don't pass the reference
+        self.newly_removed_ad_links = self.active_ad_links.copy()        # Deleting all found links until only the removed ones remain
         for page_soup in self.page_soups:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
-                if not (ad['to'] in self.active_ad_links):       # Attribute 'to' is the relative link to the ad
+                if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
+                    self.newly_removed_ad_links.remove(ad['to'])        
+                else:
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
-                else:
-                    self.newly_removed_ad_links.remove(ad['to'])
-                    self.active_ad_links.remove(ad['to'])
+        
         self.removed_ad_links += self.newly_removed_ad_links
+        for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
+            print('Removed ' + removed_link)
+            self.active_ad_links.remove(removed_link)
 
-
+    def save(self):
+        file = open('resources/monitored_category_{}.txt'.format(self.name))
 '''
 	def save(self):
 		file = open('resources/saved_settings.txt', 'w+')
@@ -94,16 +97,13 @@ class Monitored_category:
 '''
 
 
-
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('bugs', 'https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
-
+bugs = Monitored_category('https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
 
 update_delay = 7 * 60   # Seconds
 
 while True:
-    
     bugs.fetch_all()
     bugs.update_ad_links()
     for new_ad_link in bugs.new_ad_links:
@@ -111,6 +111,6 @@ while True:
         break
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
-    print('Number of ads: ' + str(len(bugs.ad_links)))
+    print('Number of ads: ' + str(len(bugs.active_ad_links)))
     print("Number pages = " + str(len(bugs.page_soups)))
     time.sleep(update_delay)
