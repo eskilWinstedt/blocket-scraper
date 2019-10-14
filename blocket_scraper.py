@@ -14,13 +14,33 @@ def format2filename(filename):
     return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
 
 class Ad:
-    def __init__(self):
-        self.upload_time
-        self.relative_url
-        self.location
-        self.price
-        self.titel
-        self.description
+    def __init__(self, url):
+        self.url = url
+        
+        self.upload_time = 0
+        self.relative_url = 0
+        self.location = 0
+        self.price = 0
+        self.titel = 0
+        self.description = 0
+
+    def fetch(self):
+        '''Fetches the an Ad and creates a soup'''
+        while True:
+            try:
+                request = urllib.request.Request(self.url)
+                html = urllib.request.urlopen(request)
+                self.soup =  BeautifulSoup(html)
+                break
+            except Exception as e:
+                print("An error occured during ad fetching. Retrying in 30 seconds")
+                print("Exception: " + str(e))
+                time.sleep(30)
+    
+    def get_price(self):
+        '''Won't work if no price is specified'''
+        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'}).get_text()
+        print(self.price)
 
 
 class Monitored_category:
@@ -44,12 +64,10 @@ class Monitored_category:
                 request = urllib.request.Request(url, headers = self.headers)
                 html = urllib.request.urlopen(request)
                 return BeautifulSoup(html)
-                break
             except Exception as e:
                 print("An error occured during fetching. Retrying in 30 seconds")
                 print("Exception: " + str(e))
                 time.sleep(30)
-            
     
     def fetch_all(self):
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
@@ -81,11 +99,11 @@ class Monitored_category:
             self.active_ad_links.remove(removed_link)
 
     def save(self):
+        '''Save active_ad_links and removed_ad_links'''
         file = open('resources/monitored_category_{}.txt'.format(self.filename), 'wb')       # wb works for pickle.dump()
-
         file.seek(0)        # Clears
         file.truncate()     # the file
-
+        
         file_content = {
             'active_ad_links': self.active_ad_links,
             'removed_ad_links': self.removed_ad_links
@@ -100,20 +118,6 @@ class Monitored_category:
             file_content = pickle.load(file)
             self.active_ad_links = file_content['active_ad_links']
             self.removed_ad_links =  file_content['removed_ad_links']
-'''
-	def loadSettings(self):
-		if checkFileExisting('resources/saved_settings.txt'):
-			file = open('resources/saved_settings.txt', 'r')
-			self.savedSettings = file.read()
-			try: 
-				self.settings = eval(self.savedSettings)
-			except Exception as e:
-				print('Exeption: ' + str(e))
-			self.updateDisplayDimensions()
-			return False
-		else:
-			return True
-'''
 
 
 headers = {}
@@ -125,10 +129,16 @@ update_delay = 7 * 60   # Seconds
 while True:
     bugs.fetch_all()
     bugs.update_ad_links()
+
     for new_ad_link in bugs.new_ad_links:
         os.system('start chrome beta.blocket.se' + new_ad_link)
-        break
     bugs.save()
+
+    for ad in bugs.active_ad_links:
+        newAd = Ad('https://beta.blocket.se' + ad)
+        newAd.fetch()
+        newAd.get_price()
+        break
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
     print('Number of ads: ' + str(len(bugs.active_ad_links)))
