@@ -48,14 +48,13 @@ class Monitored_category:
         # This is used to download the website
         self.url = url
         self.headers = {}
-        self.filename = format2filename(url)
-        
+        self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
 
         self.active_ad_links = []
         self.removed_ad_links = []
-        self.load()
-        self.fetch_all()
-        self.update_ad_links()
+        if not self.load():         # Fetch from the internet if no save is found
+            self.fetch_all()
+            self.update_ad_links()
 
     def fetch(self, url):
         '''Takes an url to a page as the argument, fetches the page and returns it as a soup'''
@@ -100,10 +99,11 @@ class Monitored_category:
 
     def save(self):
         '''Save active_ad_links and removed_ad_links'''
-        file = open('resources/monitored_category_{}.txt'.format(self.filename), 'wb')       # wb works for pickle.dump()
+        file = open(self.filepath, 'wb')       # wb works for pickle.dump()
         file.seek(0)        # Clears
         file.truncate()     # the file
         
+        print('Saving removed ads: ' + str(self.removed_ad_links))
         file_content = {
             'active_ad_links': self.active_ad_links,
             'removed_ad_links': self.removed_ad_links
@@ -113,11 +113,14 @@ class Monitored_category:
 
     def load(self):
         '''Loads saved file'''
-        if os.path.isfile(self.filename):
-            file = open('resources/monitored_category_{}.txt'.format(self.filename), 'rb')
+        if os.path.isfile(self.filepath):
+            file = open(self.filepath, 'rb')
             file_content = pickle.load(file)
             self.active_ad_links = file_content['active_ad_links']
             self.removed_ad_links =  file_content['removed_ad_links']
+            return True     # Successfully loaded
+        else: 
+            return False    # No file to load
 
 
 headers = {}
@@ -129,16 +132,16 @@ update_delay = 7 * 60   # Seconds
 while True:
     bugs.fetch_all()
     bugs.update_ad_links()
-
+    
     for new_ad_link in bugs.new_ad_links:
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
 
-    for ad in bugs.active_ad_links:
+    '''for ad in bugs.active_ad_links:
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
         newAd.get_price()
-        break
+        break'''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
     print('Number of ads: ' + str(len(bugs.active_ad_links)))
