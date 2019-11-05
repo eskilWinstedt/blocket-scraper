@@ -1,17 +1,23 @@
 import urllib.request
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 import time
 import os
 import pickle
 
-# To do:
-# *See when ads are removed
-# *Download ads information. 
-# 
-#
+'''
+BUGS:
+    1. Appearently Python doesn't allow a dictionary to be updated during iteration. Will have to solve in some other way
+'''
+
 
 def format2filename(filename):
     return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
+
+def get_base_url(full_url):
+    parsed_url = urlparse(full_url)
+    return '{url.scheme}://{url.netloc}'.format(url=parsed_url)
+
 
 class Ad:
     def __init__(self, url):
@@ -47,6 +53,7 @@ class Monitored_category:
     def __init__(self, url):
         # This is used to download the website
         self.url = url
+        self.base_url = get_base_url(url)
         self.headers = {}
         self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
 
@@ -68,17 +75,35 @@ class Monitored_category:
                 print("Exception: " + str(e))
                 time.sleep(30)
     
+    def get_relative_page_links(self, soup, relative_links):
+        '''Gets all links to all pages visible from the supplied page soup'''
+        page_nav_div = soup.find('div', attrs={'class': 'Pagination__Buttons-uamu6s-3'})      # Get the div with the page-nav buttons
+        link_tags = page_nav_div.find_all('a')
+
+        for link_tag in link_tags:
+            page_number = link_tag.string   # Gets <tag>THIS IN HERE</tag> from a tag
+            print(page_number)
+            relative_link = link_tag['href']
+            relative_links[int(page_number)] = relative_link
+        return relative_links
+
     def fetch_all(self):
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
         self.page_soups = []
         self.page_soups.append(self.fetch(self.url))
-        page_links = [self.url]
-
-        page_nav_div = self.page_soups[0].find('div', attrs={'class': 'Pagination__Buttons-uamu6s-3'})      # Get the div with the page-nav buttons
-        number_pages = len(page_nav_div.find_all('a'))
-        for page_index in range(2, number_pages + 1):       # Starting at index 2 because page 1 is already fetched
-            page_link = self.url + '&page=' + str(page_index)
-            self.page_soups.append(self.fetch(page_link))
+        relative_page_links = {}     # Saves relative links to all pages in the given category
+        relative_page_links = self.get_relative_page_links(self.page_soups[0], relative_page_links) # Scans the first page soup for all visible page links
+        
+        for page_number, relative_page_link in relative_page_links.items():     # Can't use items() because it will not allow the dictionary to change size during the for loop
+            if page_number == 1:
+                continue    # The first page has already been fetched
+            absolute_page_link = self.base_url + relative_page_link
+            page_soup = self.fetch(absolute_page_link)
+            self.page_soups.append(page_soup)
+            if not page_number + 1 in relative_page_links:  # If the next page numbers link is not saved.  The current page will be searched for more page links
+                print('updating')
+                relative_page_links = self.get_relative_page_links(page_soup, relative_page_links)
+                print(relative_page_links)
 
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
@@ -87,11 +112,12 @@ class Monitored_category:
         for page_soup in self.page_soups:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
                 if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
+                    print(ad['to'])
                     self.newly_removed_ad_links.remove(ad['to'])        
                 else:
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
-        
+            
         self.removed_ad_links += self.newly_removed_ad_links
         for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
             print('Removed ' + removed_link)
@@ -122,17 +148,15 @@ class Monitored_category:
         else: 
             return False    # No file to load
 
-
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
-
+bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=15&cg=1020&st=s')
 update_delay = 7 * 60   # Seconds
 
 while True:
     bugs.fetch_all()
     bugs.update_ad_links()
-    
+
     for new_ad_link in bugs.new_ad_links:
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
