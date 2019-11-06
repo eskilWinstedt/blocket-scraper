@@ -35,8 +35,9 @@ class Ad:
     
     def get_price(self):
         '''Won't work if no price is specified'''
-        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'}).get_text()
-        print(self.price)
+        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
+        if self.price:
+            self.price = self.price.string
 
 
 class Monitored_category:
@@ -68,7 +69,10 @@ class Monitored_category:
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
         self.page_soups = [self.fetch(self.url + '&page=100')]      # Change this if you want to fetch 
         page_nav_div = self.page_soups[0].find('div', attrs={'class': 'Pagination__Buttons-uamu6s-3'})      # Get the div with the page-nav buttons
-        number_pages = int(page_nav_div.find_all('a')[-1].string)       # Gets the last page number
+        if page_nav_div:
+            number_pages = int(page_nav_div.find_all('a')[-1].string)       # Gets the last page number
+        else:
+            number_pages = 1
         
         for page_number in range(1, number_pages):
             page_link = self.url + '&page=' + str(page_number)
@@ -118,7 +122,7 @@ class Monitored_category:
 
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=15&cg=1020&st=s')
+bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=29&cbl1=11&cg=1020&st=s')
 update_delay = 7 * 60   # Seconds
 
 while True:
@@ -129,13 +133,15 @@ while True:
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
 
-    '''for ad in bugs.active_ad_links:
+    for ad in bugs.active_ad_links:
+        print('adding ad')
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
         newAd.get_price()
-        break'''
+    '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
     print('Number of ads: ' + str(len(bugs.active_ad_links)))
     print("Number pages = " + str(len(bugs.page_soups)))
+    time.sleep(update_delay)'''
     time.sleep(update_delay)
