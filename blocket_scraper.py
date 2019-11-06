@@ -70,14 +70,12 @@ class Monitored_category:
     
     def fetch_all(self):
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
-        self.page_soups = []
-        self.page_soups.append(self.fetch(self.url))
-        page_links = [self.url]
-
+        self.page_soups = [self.fetch(self.url + '&page=100')]      # Change this if you want to fetch 
         page_nav_div = self.page_soups[0].find('div', attrs={'class': 'Pagination__Buttons-uamu6s-3'})      # Get the div with the page-nav buttons
-        number_pages = len(page_nav_div.find_all('a'))
-        for page_index in range(2, number_pages + 1):       # Starting at index 2 because page 1 is already fetched
-            page_link = self.url + '&page=' + str(page_index)
+        number_pages = int(page_nav_div.find_all('a')[-1].string)       # Gets the last page number
+        
+        for page_number in range(1, number_pages):
+            page_link = self.url + '&page=' + str(page_number)
             self.page_soups.append(self.fetch(page_link))
 
     def update_ad_links(self): 
@@ -125,7 +123,7 @@ class Monitored_category:
 
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://beta.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cg=1020&st=s&cbl1=17')
+bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=15&cg=1020&st=s')
 
 update_delay = 7 * 60   # Seconds
 
