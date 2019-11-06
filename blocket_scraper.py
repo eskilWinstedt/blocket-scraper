@@ -1,17 +1,13 @@
 import urllib.request
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 import time
 import os
 import pickle
 
-# To do:
-# *See when ads are removed
-# *Download ads information. 
-# 
-#
-
 def format2filename(filename):
     return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
+
 
 class Ad:
     def __init__(self, url):
@@ -47,6 +43,7 @@ class Monitored_category:
     def __init__(self, url):
         # This is used to download the website
         self.url = url
+        self.base_url = get_base_url(url)
         self.headers = {}
         self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
 
@@ -67,7 +64,7 @@ class Monitored_category:
                 print("An error occured during fetching. Retrying in 30 seconds")
                 print("Exception: " + str(e))
                 time.sleep(30)
-    
+
     def fetch_all(self):
         '''Fetches all pages in one category and saves them as soups in a list where every element is one page'''
         self.page_soups = [self.fetch(self.url + '&page=100')]      # Change this if you want to fetch 
@@ -78,6 +75,7 @@ class Monitored_category:
             page_link = self.url + '&page=' + str(page_number)
             self.page_soups.append(self.fetch(page_link))
 
+
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
         self.new_ad_links = []
@@ -85,11 +83,12 @@ class Monitored_category:
         for page_soup in self.page_soups:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
                 if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
+                    print(ad['to'])
                     self.newly_removed_ad_links.remove(ad['to'])        
                 else:
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
-        
+            
         self.removed_ad_links += self.newly_removed_ad_links
         for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
             print('Removed ' + removed_link)
@@ -120,17 +119,15 @@ class Monitored_category:
         else: 
             return False    # No file to load
 
-
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
 bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=15&cg=1020&st=s')
-
 update_delay = 7 * 60   # Seconds
 
 while True:
     bugs.fetch_all()
     bugs.update_ad_links()
-    
+
     for new_ad_link in bugs.new_ad_links:
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
