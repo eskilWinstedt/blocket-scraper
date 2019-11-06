@@ -43,7 +43,6 @@ class Monitored_category:
     def __init__(self, url):
         # This is used to download the website
         self.url = url
-        self.base_url = get_base_url(url)
         self.headers = {}
         self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
 
@@ -75,7 +74,6 @@ class Monitored_category:
             page_link = self.url + '&page=' + str(page_number)
             self.page_soups.append(self.fetch(page_link))
 
-
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
         self.new_ad_links = []
@@ -83,7 +81,6 @@ class Monitored_category:
         for page_soup in self.page_soups:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
                 if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
-                    print(ad['to'])
                     self.newly_removed_ad_links.remove(ad['to'])        
                 else:
                     self.active_ad_links.append(ad['to'])
