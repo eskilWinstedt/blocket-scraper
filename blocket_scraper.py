@@ -17,7 +17,7 @@ class Ad:
         self.relative_url = 0
         self.location = 0
         self.price = None
-        self.titel = 0
+        self.title = ""
         self.description = 0
 
     def fetch(self):
@@ -38,12 +38,26 @@ class Ad:
         self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
         if self.price:
             self.price = self.price.string
-        print(self.price)
+        else:
+            self.price = 'None'
     
     def set_title(self):
         '''Sets the title of an ad'''
-        self.titel = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'}).string
-        print(self.titel)
+        self.title = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'}).string
+    
+    def printable_line(self, data, row_length):
+        data_length = len(' |' + data)
+        number_spaces = row_length - data_length
+        return ' ' + data + (' ' * number_spaces) + '|'
+    
+    def __repr__(self):
+        width = 70
+        print('\n')
+        print('----' + self.title + '-' * (width - 4 - len(self.title)))
+        print(self.printable_line('Ad price: ' + self.price, width))
+        print(self.printable_line('Ad title: ' + self.title, width))
+        print('-' * width)
+        print('\n')
 
 
 class Monitored_category:
@@ -140,11 +154,11 @@ while True:
     bugs.save()
 
     for ad in bugs.active_ad_links:
-        print('adding ad')
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
         newAd.set_price()
         newAd.set_title()
+        newAd.__repr__()
     '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
