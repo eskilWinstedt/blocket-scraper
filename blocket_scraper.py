@@ -16,7 +16,7 @@ class Ad:
         self.upload_time = 0
         self.relative_url = 0
         self.location = 0
-        self.price = 0
+        self.price = None
         self.titel = 0
         self.description = 0
 
@@ -33,11 +33,17 @@ class Ad:
                 print("Exception: " + str(e))
                 time.sleep(30)
     
-    def get_price(self):
-        '''Won't work if no price is specified'''
+    def set_price(self):
+        '''Sets the price of and ad if it's specified'''
         self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
         if self.price:
             self.price = self.price.string
+        print(self.price)
+    
+    def set_title(self):
+        '''Sets the title of an ad'''
+        self.titel = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'}).string
+        print(self.titel)
 
 
 class Monitored_category:
@@ -137,7 +143,8 @@ while True:
         print('adding ad')
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
-        newAd.get_price()
+        newAd.set_price()
+        newAd.set_title()
     '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
