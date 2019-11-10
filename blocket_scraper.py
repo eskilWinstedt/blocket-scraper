@@ -5,6 +5,7 @@ import time
 import os
 import pickle
 
+
 def format2filename(filename):
     return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
 
@@ -12,13 +13,14 @@ def format2filename(filename):
 class Ad:
     def __init__(self, url):
         self.url = url
-        
+
         self.upload_time = 0
         self.relative_url = 0
-        self.location = 0
+        self.timestamp = 'Not set'
+        self.location = 'Not set'
         self.price = None
-        self.title = ""
-        self.description = 0
+        self.title = "Not set"
+        self.description = 'Not set'
 
     def fetch(self):
         '''Fetches the an Ad and creates a soup'''
@@ -33,31 +35,84 @@ class Ad:
                 print("Exception: " + str(e))
                 time.sleep(30)
     
-    def set_price(self):
-        '''Sets the price of and ad if it's specified'''
-        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
-        if self.price:
-            self.price = self.price.string
+    def remove_from_soup(self, soup, remove, replace = ''):
+        return BeautifulSoup(str(soup).replace(remove, replace))
+
+    def set_timestamp(self):
+        raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
+        raw_timestamp = self.remove_from_soup(raw_timestamp, 'Inlagd: <!-- -->')
+        raw_timestamp = raw_timestamp.string
+        if 'idag' in  raw_timestamp:
+            pass
+        elif 'igår' in raw_timestamp:
+            pass
+        elif 'i måndags' in raw_timestamp:
+            pass
+        elif 'i tisdags' in raw_timestamp:
+            pass
+        elif 'i onsdags' in raw_timestamp:
+            pass
+        elif 'i torsdags' in raw_timestamp:
+            pass
+        elif 'i fredags' in raw_timestamp:
+            pass
+        elif 'i lördags' in raw_timestamp:
+            pass
+        elif 'i söndags' in raw_timestamp:
+            pass
         else:
-            self.price = 'None'
+            # The timestamp is in this format: day month clock
+            pass
+
+        self.timestamp = raw_timestamp.string
+
+    def set_location(self):
+        '''Sets the location of an ad'''
+        self.location = self.soup.find('a', attrs={'class': 'LocationInfo__StyledMapLink-sc-1op511s-3'})
+        if self.location:
+            self.location = self.remove_from_soup(self.location,'<!-- --> (hitta.se)')    # .string doesn't work with HTML-comments
+            self.location = self.location.string
     
     def set_title(self):
         '''Sets the title of an ad'''
         self.title = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'}).string
     
+    def set_price(self):
+        '''Sets the price of and ad if it's specified'''
+        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
+        if self.price:
+            self.price = self.price.string
+
+    def set_description(self):
+        '''Sets the description of the ad'''
+        self.description = self.soup.find('div', attrs={'class': 'BodyCard__DescriptionPart-sc-15r463q-2'})
+        if self.description:
+            self.description = self.description.string
+    
     def printable_line(self, data, row_length):
+        data = data.replace('\n', '')
+        prefix = ' |'
+        data = data[: row_length - len(prefix)]
         data_length = len(' |' + data)
         number_spaces = row_length - data_length
         return ' ' + data + (' ' * number_spaces) + '|'
     
     def __repr__(self):
-        width = 70
+        width = 100
         print('\n')
         print('----' + self.title + '-' * (width - 4 - len(self.title)))
-        print(self.printable_line('Ad price: ' + self.price, width))
-        print(self.printable_line('Ad title: ' + self.title, width))
+        print(self.printable_line('Price: ' + str(self.price), width))
+        print(self.printable_line('Description: ' + str(self.description), width))
+        print(self.printable_line('Location: ' + str(self.location), width))
+        print(self.printable_line('Inlagd: ' + str(self.timestamp), width))
         print('-' * width)
         print('\n')
+
+
+class Vehicle_ad(Ad):
+    def __init__(self):
+        '''This class will extend the Ad class with properties like Year'''
+        pass
 
 
 class Monitored_category:
@@ -142,7 +197,7 @@ class Monitored_category:
 
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=29&cbl1=11&cg=1020&st=s')
+bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020&st=s')
 update_delay = 7 * 60   # Seconds
 
 while True:
@@ -156,8 +211,11 @@ while True:
     for ad in bugs.active_ad_links:
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
+        newAd.set_location()
         newAd.set_price()
         newAd.set_title()
+        newAd.set_description()
+        newAd.set_timestamp()
         newAd.__repr__()
     '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
