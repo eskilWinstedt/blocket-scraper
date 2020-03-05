@@ -13,14 +13,8 @@ def format2filename(filename):
 class Ad:
     def __init__(self, url):
         self.url = url
-
-        self.upload_time = 0
-        self.relative_url = 0
-        self.timestamp = 'Not set'
-        self.location = 'Not set'
-        self.price = None
-        self.title = "Not set"
-        self.description = 'Not set'
+        print("I'm called")
+        self.update()
 
     def fetch(self):
         '''Fetches the an Ad and creates a soup'''
@@ -28,24 +22,41 @@ class Ad:
             try:
                 request = urllib.request.Request(self.url)
                 html = urllib.request.urlopen(request)
-                self.soup =  BeautifulSoup(html)
+                self.soup =  BeautifulSoup(html, 'html.parser')
                 break
             except Exception as e:
                 print("An error occured during ad fetching. Retrying in 30 seconds")
                 print("Exception: " + str(e))
                 time.sleep(30)
     
-    def remove_from_soup(self, soup, remove, replace = ''):
-        return BeautifulSoup(str(soup).replace(remove, replace))
+    def soup_replace(self, soup, remove, replace = ''):
+        return BeautifulSoup(str(soup).replace(remove, replace), 'html.parser')
 
-    def set_timestamp(self):
-        raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
-        raw_timestamp = self.remove_from_soup(raw_timestamp, 'Inlagd: <!-- -->')
-        raw_timestamp = raw_timestamp.string
+    def set_timestamp(self,):
+        # smalldatetime	YYYY-MM-DD hh:mm:ss
+        '''raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
+        raw_timestamp = self.soup_replace(raw_timestamp, 'Inlagd: <!-- -->')
+        raw_timestamp = raw_timestamp.string'''
+        raw_timestamp = 'idag 07:26'
+        timestamp_split = raw_timestamp.split(' ') # Splits into ['21', 'okt', '04:39]
+        clock = timestamp_split[-1].replace('0', '')  # Removes the zeros in '04:39' ---> '4:39'
+        clock = clock.split(':')       # '4:39' ---> ['4', '39']
+        clock = [int(i) for i in clock] # ['4', '39'] ---> [4, 39]
+        time_in_seconds = time.time()   # Current time
+        time_now = time.gmtime()   # Current time
         if 'idag' in  raw_timestamp:
-            pass
+            time_no_clock = time_in_seconds - time_now[3] * 3600 - time_now[4] * 60 - time_now[5]     # Removes the hours, minutes and seconds
+            timestamp = time_no_clock + clock[0] * 3600 + clock[1] * 60  # Adding the hours and minutes
         elif 'igår' in raw_timestamp:
-            pass
+            time_no_clock = time_in_seconds - time_now[3] * 3600 - time_now[4] * 60 - time_now[5]     # Removes the hours, minutes and seconds
+            timestamp = -3600 * 24 # Removes one day
+            timestamp += time_no_clock + clock[0] * 3600 + clock[1] * 60
+            '''year = str(local_time[0])
+            month = str(local_time[1])
+            day = str(local_time[2])
+            hour = str(clock[0])
+            minute = str(clock[1])
+            print('Year: ' + year + '\tMonth: ' + month + '\tDay: ' + day + '\tHour: ' + hour + '\tMinute: ' + minute)'''
         elif 'i måndags' in raw_timestamp:
             pass
         elif 'i tisdags' in raw_timestamp:
@@ -64,13 +75,13 @@ class Ad:
             # The timestamp is in this format: day month clock
             pass
 
-        self.timestamp = raw_timestamp.string
+        self.timestamp = raw_timestamp
 
     def set_location(self):
         '''Sets the location of an ad'''
         self.location = self.soup.find('a', attrs={'class': 'LocationInfo__StyledMapLink-sc-1op511s-3'})
         if self.location:
-            self.location = self.remove_from_soup(self.location,'<!-- --> (hitta.se)')    # .string doesn't work with HTML-comments
+            self.location = self.soup_replace(self.location,'<!-- --> (hitta.se)')    # .string doesn't work with HTML-comments
             self.location = self.location.string
     
     def set_title(self):
@@ -89,6 +100,19 @@ class Ad:
         if self.description:
             self.description = self.description.string
     
+    def update(self):
+        '''Updates the ad'''
+        self.fetch()
+        self.set_timestamp()
+        self.set_location()
+        self.set_title()
+        self.set_price()
+        self.set_description()
+
+    def archive(self):
+        '''Records the remove timestamp to see when the ad was removed'''
+        print("An ad has been removed!")
+
     def printable_line(self, data, row_length):
         data = data.replace('\n', '')
         prefix = ' |'
@@ -122,6 +146,7 @@ class Monitored_category:
         self.headers = {}
         self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
 
+        self.ads = {}   # Key: ad ID value: ad class
         self.active_ad_links = []
         self.removed_ad_links = []
         if not self.load():         # Fetch from the internet if no save is found
@@ -134,7 +159,7 @@ class Monitored_category:
             try:
                 request = urllib.request.Request(url, headers = self.headers)
                 html = urllib.request.urlopen(request)
-                return BeautifulSoup(html)
+                return BeautifulSoup(html, 'html.parser')
             except Exception as e:
                 print("An error occured during fetching. Retrying in 30 seconds")
                 print("Exception: " + str(e))
@@ -153,6 +178,13 @@ class Monitored_category:
             page_link = self.url + '&page=' + str(page_number)
             self.page_soups.append(self.fetch(page_link))
 
+    def new_ad(self, link):
+        id = self.get_ad_id(link)
+        if id in self.ads:    # Does the id exist?
+            return True
+        else:
+            return False
+
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
         self.new_ad_links = []
@@ -161,14 +193,30 @@ class Monitored_category:
             for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
                 if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
                     self.newly_removed_ad_links.remove(ad['to'])        
-                else:
+                else:   # The ad is new or has changed name
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
-            
+                    ad_id = self.get_ad_id(ad['to'])
+                    if ad_id in self.ads:   # The ad already exists
+                        # Update the ad so the new name will be saved!
+                        print('THE NAME HAS BEEN CHANGED')
+                        self.ads[ad_id].update()
+                    else:
+                        print('yes')
+                        print('Ad id: ' + ad_id)
+                        self.ads[ad_id] = self.ad_class(ad['to'])
+                        print(str(self.ad_class(ad['to']).url))
+                        print(len(self.ads))
+        print('Nu är jag här')
+        for key in self.ads:
+            self.ads[key].__repr__()
         self.removed_ad_links += self.newly_removed_ad_links
         for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
             print('Removed ' + removed_link)
             self.active_ad_links.remove(removed_link)
+            ad_id = self.get_ad_id(removed_link)
+            self.ads[ad_id].archive()
+
 
     def save(self):
         '''Save active_ad_links and removed_ad_links'''
@@ -195,6 +243,23 @@ class Monitored_category:
         else: 
             return False    # No file to load
 
+    def get_ad_id(self, ad_link):
+        '''Gets the unique ad id from the ad link '''
+        return ad_link.split('/')[-1]
+
+    def ad_class(self, link):
+        '''Depending on the category this class is searching in, different classes will be used for the ads'''
+        self.category = ['alla', 'fordon', 'bilar']     # This will be automaticaly detected later
+        absolute_ad = 'https://beta.blocket.se' + link
+        if False:
+            pass
+        else:
+            print('det stämmer!')
+            print('absolut ad: ' + absolute_ad)
+            reference = Ad(absolute_ad)
+            return reference
+        
+
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
 bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020&st=s')
@@ -208,6 +273,7 @@ while True:
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
 
+    '''
     for ad in bugs.active_ad_links:
         newAd = Ad('https://beta.blocket.se' + ad)
         newAd.fetch()
@@ -217,6 +283,7 @@ while True:
         newAd.set_description()
         newAd.set_timestamp()
         newAd.__repr__()
+    '''
     '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
