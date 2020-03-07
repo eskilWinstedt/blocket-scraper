@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import urllib.request
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -13,6 +15,13 @@ def format2filename(filename):
 class Ad:
     def __init__(self, url):
         self.url = url
+        self.timestamp = None
+        self.removed_timestamp = None
+        self.location = None
+        self.title = None
+        self.price = None
+        self.description = None
+
         print("I'm called")
         self.update()
 
@@ -30,78 +39,110 @@ class Ad:
                 time.sleep(30)
     
     def soup_replace(self, soup, remove, replace = ''):
+        '''Removes and replaces a given combination of characters in a soup'''
         return BeautifulSoup(str(soup).replace(remove, replace), 'html.parser')
 
-    def set_timestamp(self,):
-        # smalldatetime	YYYY-MM-DD hh:mm:ss
-        '''raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
-        raw_timestamp = self.soup_replace(raw_timestamp, 'Inlagd: <!-- -->')
-        raw_timestamp = raw_timestamp.string'''
-        raw_timestamp = 'idag 07:26'
-        timestamp_split = raw_timestamp.split(' ') # Splits into ['21', 'okt', '04:39]
-        clock = timestamp_split[-1].replace('0', '')  # Removes the zeros in '04:39' ---> '4:39'
-        clock = clock.split(':')       # '4:39' ---> ['4', '39']
-        clock = [int(i) for i in clock] # ['4', '39'] ---> [4, 39]
-        time_in_seconds = time.time()   # Current time
-        time_now = time.gmtime()   # Current time
-        if 'idag' in  raw_timestamp:
-            time_no_clock = time_in_seconds - time_now[3] * 3600 - time_now[4] * 60 - time_now[5]     # Removes the hours, minutes and seconds
-            timestamp = time_no_clock + clock[0] * 3600 + clock[1] * 60  # Adding the hours and minutes
-        elif 'igår' in raw_timestamp:
-            time_no_clock = time_in_seconds - time_now[3] * 3600 - time_now[4] * 60 - time_now[5]     # Removes the hours, minutes and seconds
-            timestamp = -3600 * 24 # Removes one day
-            timestamp += time_no_clock + clock[0] * 3600 + clock[1] * 60
-            '''year = str(local_time[0])
-            month = str(local_time[1])
-            day = str(local_time[2])
-            hour = str(clock[0])
-            minute = str(clock[1])
-            print('Year: ' + year + '\tMonth: ' + month + '\tDay: ' + day + '\tHour: ' + hour + '\tMinute: ' + minute)'''
-        elif 'i måndags' in raw_timestamp:
-            pass
-        elif 'i tisdags' in raw_timestamp:
-            pass
-        elif 'i onsdags' in raw_timestamp:
-            pass
-        elif 'i torsdags' in raw_timestamp:
-            pass
-        elif 'i fredags' in raw_timestamp:
-            pass
-        elif 'i lördags' in raw_timestamp:
-            pass
-        elif 'i söndags' in raw_timestamp:
-            pass
-        else:
-            # The timestamp is in this format: day month clock
-            pass
+    def set_timestamp(self):
+            '''Takes a timestamp from blocket in these formats: Idag 13:57 / Igår 03:34 / 
+            I måndags hh:mm / 31 maj hh::m / 9 nov. 14:57.  Converts to time in seconds if a timestamp is identified'''
 
-        self.timestamp = raw_timestamp
+            # Fetch the timestamp and convert to string
+            raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
+            raw_timestamp = self.soup_replace(raw_timestamp, 'Inlagd: <!-- -->')
+            raw_timestamp = raw_timestamp.string
+
+            timestamp_parts = raw_timestamp.split(' ')      # example: ['21', 'okt', '04:39]
+
+            # Clock (hh:mm)
+            clock = timestamp_parts[-1]     # '04:39'
+            clock = clock.split(':')    # ['04', '39']
+            clock = list(map(int, clock))   # [4, 39]
+            print("clock: " + str(clock))
+
+            # Current times
+            seconds_now = time.time()  # Tinme since beginning of time in seconds
+            time_now = time.localtime()   # A tuple with year, month, day, weekday etc.
+            clock_now_seconds = time_now[3] * 3600 + time_now[4] * 60 + time_now[5]
+            weekday_now = time_now[6]   # Weekday in numbers. Monday is 0
+            
+            seconds_now_no_clock = seconds_now - clock_now_seconds
+            timestamp = seconds_now_no_clock + clock[0] * 3600 + clock[1] * 60 # Adding the hours and minutes from the ad
+            
+            blocket_days = ['i måndags', 'i tisdags', 'i onsdags', 'i torsdags', 'i fredags', 'i lördags', 'i söndags']
+            blocket_months = ['jan.', 'feb.', 'mars', 'april', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.']
+            
+            if 'idag' in  raw_timestamp:    
+                self.timestamp = timestamp
+            elif 'igår' in raw_timestamp:
+                self.timestamp = timestamp - 3600 * 24
+            else:
+                # Check for day
+                for weekday_then, blocket_day in enumerate(blocket_days):
+                    if blocket_day in raw_timestamp:
+                        if weekday_now > weekday_then:
+                            days_since = weekday_now - weekday_then
+                        else:
+                            days_since = weekday_now - weekday_then + 7  
+                                              
+                        seconds_since = 3600 * 24 * days_since
+                        self.timestamp = timestamp - seconds_since
+                        return
+                
+                # Check for month
+                for month_index, blocket_month in enumerate(blocket_months):
+                    if blocket_month in raw_timestamp:
+                        month_number = month_index + 1
+                        if month_number > time_now.tm_mon:
+                            year = time_now.tm_year - 1
+                        elif month_number < time_now.tm_mon:
+                            year = time_now.tm_year
+                        elif timestamp_parts[0] < time_now.tm_mday:     # ad_mday < mday_now ?
+                            year = time_now.tm_year
+                            # There are no blocket ads near one year old
+                            print('WARNING!')
+                            print('This blocket date was older than expected: raw_timestamp')
+                        else:
+                            year = time_now.tm_year - 1
+                            # There are no blocket ads near one year old
+                            print('WARNING!')
+                            print('This blocket date was older than expected: raw_timestamp')
+                        
+                        month_day = int(timestamp_parts[0])
+                        time_tuple = (year, month_number, month_day, clock[0], clock[1], 0, 0, 1, -1) # year, month, month_day, hours, minutes, seconds, week_day, year_day, daylight_savings (-1=auto).  Week_day and year_day doesn't make any difference 
+                        self.timestamp = time.mktime(time_tuple)
+                        return
+                
+                # The timestamp could not be set
+                print('AN error has occurred.')
+                print('This blocket date was not recognized: ' + raw_timestamp)
 
     def set_location(self):
-        '''Sets the location of an ad'''
-        self.location = self.soup.find('a', attrs={'class': 'LocationInfo__StyledMapLink-sc-1op511s-3'})
-        if self.location:
-            self.location = self.soup_replace(self.location,'<!-- --> (hitta.se)')    # .string doesn't work with HTML-comments
-            self.location = self.location.string
+        '''Sets the location of an ad if it's identified'''
+        location = self.soup.find('a', attrs={'class': 'LocationInfo__StyledMapLink-sc-1op511s-3'})
+        if location:
+            location = self.soup_replace(location,'<!-- --> (hitta.se)')    # .string doesn't work with HTML-comments
+            self.location = location.string 
     
     def set_title(self):
-        '''Sets the title of an ad'''
-        self.title = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'}).string
+        '''Sets the title of the ad if it's identified'''
+        title = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'})
+        if title:
+            self.title = title.string
     
     def set_price(self):
         '''Sets the price of and ad if it's specified'''
-        self.price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
-        if self.price:
-            self.price = self.price.string
+        price = self.soup.find('div', attrs={'class': 'Price__StyledPrice-crp2x0-0'})
+        if price:
+            self.price = price.string
 
     def set_description(self):
         '''Sets the description of the ad'''
-        self.description = self.soup.find('div', attrs={'class': 'BodyCard__DescriptionPart-sc-15r463q-2'})
-        if self.description:
-            self.description = self.description.string
+        description = self.soup.find('div', attrs={'class': 'BodyCard__DescriptionPart-sc-15r463q-2'})
+        if description:
+            self.description = description.string         
     
     def update(self):
-        '''Updates the ad'''
+        '''Updates the ads data'''
         self.fetch()
         self.set_timestamp()
         self.set_location()
@@ -112,6 +153,7 @@ class Ad:
     def archive(self):
         '''Records the remove timestamp to see when the ad was removed'''
         print("An ad has been removed!")
+        self.removed_timestamp = time.localtime()
 
     def printable_line(self, data, row_length):
         data = data.replace('\n', '')
@@ -128,7 +170,7 @@ class Ad:
         print(self.printable_line('Price: ' + str(self.price), width))
         print(self.printable_line('Description: ' + str(self.description), width))
         print(self.printable_line('Location: ' + str(self.location), width))
-        print(self.printable_line('Inlagd: ' + str(self.timestamp), width))
+        print(self.printable_line('Inlagd: ' + str(time.ctime(self.timestamp)), width))
         print('-' * width)
         print('\n')
 
@@ -141,7 +183,6 @@ class Vehicle_ad(Ad):
 
 class Monitored_category:
     def __init__(self, url):
-        # This is used to download the website
         self.url = url
         self.headers = {}
         self.filepath = 'resources/monitored_category_{}.txt'.format(format2filename(url))
@@ -151,7 +192,7 @@ class Monitored_category:
         self.removed_ad_links = []
         if not self.load():         # Fetch from the internet if no save is found
             self.fetch_all()
-            self.update_ad_links()
+            self.update_ad_links() 
 
     def fetch(self, url):
         '''Takes an url to a page as the argument, fetches the page and returns it as a soup'''
@@ -177,6 +218,7 @@ class Monitored_category:
         for page_number in range(1, number_pages):
             page_link = self.url + '&page=' + str(page_number)
             self.page_soups.append(self.fetch(page_link))
+            print("sidnummer: " + page_number)
 
     def new_ad(self, link):
         id = self.get_ad_id(link)
@@ -190,21 +232,22 @@ class Monitored_category:
         self.new_ad_links = []
         self.newly_removed_ad_links = self.active_ad_links.copy()        # Deleting all found links until only the removed ones remain
         for page_soup in self.page_soups:
-            for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0 eDiSuB'}):     # Loop over every ad container
+            # Loop over every ad container
+            for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0'}):
                 if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
                     self.newly_removed_ad_links.remove(ad['to'])        
                 else:   # The ad is new or has changed name
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
                     ad_id = self.get_ad_id(ad['to'])
-                    if ad_id in self.ads:   # The ad already exists
+                    if ad_id in self.ads:   # The ad already exists?
                         # Update the ad so the new name will be saved!
-                        print('THE NAME HAS BEEN CHANGED')
+                        print('THE AD NAME HAS BEEN CHANGED')
                         self.ads[ad_id].update()
                     else:
-                        print('yes')
+                        print('This ad is new')
                         print('Ad id: ' + ad_id)
-                        self.ads[ad_id] = self.ad_class(ad['to'])
+                        self.ads[ad_id] = self.ad_class(ad['to'])  # Using different classes for the ads depending on their categories
                         print(str(self.ad_class(ad['to']).url))
                         print(len(self.ads))
         print('Nu är jag här')
@@ -219,10 +262,10 @@ class Monitored_category:
 
 
     def save(self):
-        '''Save active_ad_links and removed_ad_links'''
+        '''Save active_ad_links and removed_ad_links. It does not save the actuall ads'''
         file = open(self.filepath, 'wb')       # wb works for pickle.dump()
         file.seek(0)        # Clears
-        file.truncate()     # the file
+        file.truncate()
         
         print('Saving removed ads: ' + str(self.removed_ad_links))
         file_content = {
@@ -254,15 +297,14 @@ class Monitored_category:
         if False:
             pass
         else:
-            print('det stämmer!')
             print('absolut ad: ' + absolute_ad)
-            reference = Ad(absolute_ad)
-            return reference
+            instance = Ad(absolute_ad)
+            return instance
         
 
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
-bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020&st=s')
+bugs = Monitored_category('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020')
 update_delay = 7 * 60   # Seconds
 
 while True:
