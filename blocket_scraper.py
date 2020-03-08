@@ -149,11 +149,8 @@ class Ad:
     def get_pictures(self):
         '''Gets all pictures from one ad and saves them in pictures/ under the name AD-ID_PICTURE-ID.jpg.
         If picture already exists, it's not downloaded again'''
-        request = urllib.request.Request(self.url)
-        html = urllib.request.urlopen(request)
-        soup = BeautifulSoup(html, 'html.parser')
 
-        pictureboxes = soup.findAll('div', attrs={'class': 'LoadingAnimationStyles__PlaceholderWrapper-c75se8-0 jkleoR'}) # There are 4
+        pictureboxes = self.soup.findAll('div', attrs={'class': 'LoadingAnimationStyles__PlaceholderWrapper-c75se8-0 jkleoR'}) # There are 4
         pictureboxes = pictureboxes[-1]
         pictureboxes = pictureboxes.findChild()
         pictureboxes = pictureboxes.findChild()
@@ -165,27 +162,35 @@ class Ad:
         if not os.path.isdir(folder):
             os.mkdir(folder)
         for picturebox in pictureboxes:
-            style_value = picturebox.attrs['style']
+            print(picturebox)
+            try:
+                style_value = picturebox.attrs['style']     #The link is found here
+            except:
+                break   # If there are no pictures
+
+            # Get the link
             start_index = style_value.find(start) + len(start)
             link = style_value[start_index:]
             end_index = link.find(")")
             link = link[:end_index]
-            if not link in self.picture_links:
-                picture_id = get_ad_id(link)
-                filepath = folder + self.id + '_' + picture_id + '.jpg'
-                self.picture_links[link] = filepath
-                if os.path.isfile(filepath): continue   # The picture is already downloaded
-                while True:
-                    try:
-                        f = open(filepath, 'wb')
-                        f.write(urllib.request.urlopen(link).read())
-                        f.close()
+
+            picture_id = get_ad_id(link)
+            filepath = folder + self.id + '_' + picture_id + '.jpg'
+            self.picture_links[link] = filepath
+            if os.path.isfile(filepath): continue   # The picture is already downloaded
+            while True:
+                try:
+                    f = open(filepath, 'wb')
+                    f.write(urllib.request.urlopen(link).read())
+                    f.close()
+                    break
+                except Exception as e:
+                    if str(e) == 'HTTP Error 404: Not Found':
+                        print("404 for this link: " + link)
                         break
-                    except Exception as e:
-                        if str(e) == 'HTTP Error 404: Not Found': break
-                        print("An error occured during ad fetching and filesaving. Retrying in 30 seconds")
-                        print("Exception: " + str(e))
-                        time.sleep(30)
+                    print("An error occured during ad fetching and filesaving. Retrying in 30 seconds")
+                    print("Exception: " + str(e))
+                    time.sleep(30)
         print(self.picture_links)
 
     def update(self):
@@ -377,6 +382,7 @@ while True:
     bugs.update_ad_links()
 
     for new_ad_link in bugs.new_ad_links:
+        print(new_ad_link)
         os.system('start chrome beta.blocket.se' + new_ad_link)
     bugs.save()
 
