@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import urllib.request
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -11,16 +10,22 @@ import pickle
 def format2filename(filename):
     return ''.join([i for i in filename if not (i in ['.', '\\', '/', ':', '*', '?', '"', '<', '>', '|'])])
 
+def get_ad_id(ad_link):
+    '''Gets the unique ad id from the ad link '''
+    return ad_link.split('/')[-1].split('.')[0]
+
 
 class Ad:
     def __init__(self, url):
         self.url = url
+        self.id = get_ad_id(url)
         self.timestamp = None
         self.removed_timestamp = None
         self.location = None
         self.title = None
         self.price = None
         self.description = None
+        self.picture_links = {}
 
         print("I'm called")
         self.update()
@@ -31,7 +36,7 @@ class Ad:
             try:
                 request = urllib.request.Request(self.url)
                 html = urllib.request.urlopen(request)
-                self.soup =  BeautifulSoup(html, 'html.parser')
+                self.soup = BeautifulSoup(html, 'html.parser')
                 break
             except Exception as e:
                 print("An error occured during ad fetching. Retrying in 30 seconds")
@@ -141,6 +146,48 @@ class Ad:
         if description:
             self.description = description.string         
     
+    def get_pictures(self):
+        '''Gets all pictures from one ad and saves them in pictures/ under the name AD-ID_PICTURE-ID.jpg.
+        If picture already exists, it's not downloaded again'''
+        request = urllib.request.Request(self.url)
+        html = urllib.request.urlopen(request)
+        soup = BeautifulSoup(html, 'html.parser')
+
+        pictureboxes = soup.findAll('div', attrs={'class': 'LoadingAnimationStyles__PlaceholderWrapper-c75se8-0 jkleoR'}) # There are 4
+        pictureboxes = pictureboxes[-1]
+        pictureboxes = pictureboxes.findChild()
+        pictureboxes = pictureboxes.findChild()
+        pictureboxes = pictureboxes.findChild()
+        pictureboxes = pictureboxes.findChildren()
+
+        start = "background-image:url("
+        folder = 'pictures/'
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+        for picturebox in pictureboxes:
+            style_value = picturebox.attrs['style']
+            start_index = style_value.find(start) + len(start)
+            link = style_value[start_index:]
+            end_index = link.find(")")
+            link = link[:end_index]
+            if not link in self.picture_links:
+                picture_id = get_ad_id(link)
+                filepath = folder + self.id + '_' + picture_id + '.jpg'
+                self.picture_links[link] = filepath
+                if os.path.isfile(filepath): continue   # The picture is already downloaded
+                while True:
+                    try:
+                        f = open(filepath, 'wb')
+                        f.write(urllib.request.urlopen(link).read())
+                        f.close()
+                        break
+                    except Exception as e:
+                        if str(e) == 'HTTP Error 404: Not Found': break
+                        print("An error occured during ad fetching and filesaving. Retrying in 30 seconds")
+                        print("Exception: " + str(e))
+                        time.sleep(30)
+        print(self.picture_links)
+
     def update(self):
         '''Updates the ads data'''
         self.fetch()
@@ -149,6 +196,7 @@ class Ad:
         self.set_title()
         self.set_price()
         self.set_description()
+        self.get_pictures()
 
     def archive(self):
         '''Records the remove timestamp to see when the ad was removed'''
@@ -175,10 +223,28 @@ class Ad:
         print('\n')
 
 
-class Vehicle_ad(Ad):
+class Car_ad(Ad):
     def __init__(self):
         '''This class will extend the Ad class with properties like Year'''
         pass
+        '''
+        Things to implement
+        Fueltype
+        transmission
+        mileage
+        modelyear
+        bodytype
+        drive
+        horsepower
+        color
+        enginesize
+        date in traffic
+        make
+        modell
+
+        utrustning
+
+        '''
 
 
 class Monitored_category:
@@ -221,7 +287,7 @@ class Monitored_category:
             print("sidnummer: " + page_number)
 
     def new_ad(self, link):
-        id = self.get_ad_id(link)
+        id = get_ad_id(link)
         if id in self.ads:    # Does the id exist?
             return True
         else:
@@ -239,7 +305,7 @@ class Monitored_category:
                 else:   # The ad is new or has changed name
                     self.active_ad_links.append(ad['to'])
                     self.new_ad_links.append(ad['to'])
-                    ad_id = self.get_ad_id(ad['to'])
+                    ad_id = get_ad_id(ad['to'])
                     if ad_id in self.ads:   # The ad already exists?
                         # Update the ad so the new name will be saved!
                         print('THE AD NAME HAS BEEN CHANGED')
@@ -257,12 +323,15 @@ class Monitored_category:
         for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
             print('Removed ' + removed_link)
             self.active_ad_links.remove(removed_link)
-            ad_id = self.get_ad_id(removed_link)
+            ad_id = get_ad_id(removed_link)
             self.ads[ad_id].archive()
-
 
     def save(self):
         '''Save active_ad_links and removed_ad_links. It does not save the actuall ads'''
+        folder = self.filepath.split('/')[0] 
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+        
         file = open(self.filepath, 'wb')       # wb works for pickle.dump()
         file.seek(0)        # Clears
         file.truncate()
@@ -285,10 +354,6 @@ class Monitored_category:
             return True     # Successfully loaded
         else: 
             return False    # No file to load
-
-    def get_ad_id(self, ad_link):
-        '''Gets the unique ad id from the ad link '''
-        return ad_link.split('/')[-1]
 
     def ad_class(self, link):
         '''Depending on the category this class is searching in, different classes will be used for the ads'''
@@ -316,20 +381,10 @@ while True:
     bugs.save()
 
     '''
-    for ad in bugs.active_ad_links:
-        newAd = Ad('https://beta.blocket.se' + ad)
-        newAd.fetch()
-        newAd.set_location()
-        newAd.set_price()
-        newAd.set_title()
-        newAd.set_description()
-        newAd.set_timestamp()
-        newAd.__repr__()
-    '''
-    '''
     print('\nLast updated ' + time.strftime('%H:%M:%S'))
     print('Removed ad links: ' + str(bugs.removed_ad_links))
     print('Number of ads: ' + str(len(bugs.active_ad_links)))
     print("Number pages = " + str(len(bugs.page_soups)))
     time.sleep(update_delay)'''
+
     time.sleep(update_delay)
