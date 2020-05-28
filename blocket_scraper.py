@@ -74,7 +74,7 @@ class Ad:
             timestamp = seconds_now_no_clock + clock[0] * 3600 + clock[1] * 60 # Adding the hours and minutes from the ad
             
             blocket_days = ['i måndags', 'i tisdags', 'i onsdags', 'i torsdags', 'i fredags', 'i lördags', 'i söndags']
-            blocket_months = ['jan.', 'feb.', 'mars', 'april', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.']
+            blocket_months = ['jan.', 'feb.', 'mars', 'apr.', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.']
             
             if 'idag' in  raw_timestamp:    
                 self.timestamp = timestamp
@@ -151,7 +151,7 @@ class Ad:
         If picture already exists, it's not downloaded again'''
 
         pictureboxes = self.soup.findAll('div', attrs={'class': 'LoadingAnimationStyles__PlaceholderWrapper-c75se8-0 jkleoR'}) # There are 4
-        pictureboxes = pictureboxes[-1]
+        pictureboxes = pictureboxes[3]
         pictureboxes = pictureboxes.findChild()
         pictureboxes = pictureboxes.findChild()
         pictureboxes = pictureboxes.findChild()
@@ -293,10 +293,7 @@ class Monitored_category:
 
     def new_ad(self, link):
         id = get_ad_id(link)
-        if id in self.ads:    # Does the id exist?
-            return True
-        else:
-            return False
+        True if id in self.ads else False # Does the id exist?
 
     def update_ad_links(self): 
         '''Finds new ads and saves their links'''
@@ -329,7 +326,11 @@ class Monitored_category:
             print('Removed ' + removed_link)
             self.active_ad_links.remove(removed_link)
             ad_id = get_ad_id(removed_link)
-            self.ads[ad_id].archive()
+            try:
+                self.ads[ad_id].archive()
+            except KeyError:
+                print("This ad was removed during this and the most recent session. No data has been saved and, therefore, the ad can not be archived.")
+
 
     def save(self):
         '''Save active_ad_links and removed_ad_links. It does not save the actuall ads'''
@@ -352,12 +353,14 @@ class Monitored_category:
     def load(self):
         '''Loads saved file'''
         if os.path.isfile(self.filepath):
+            print("Loading save")
             file = open(self.filepath, 'rb')
             file_content = pickle.load(file)
             self.active_ad_links = file_content['active_ad_links']
             self.removed_ad_links =  file_content['removed_ad_links']
             return True     # Successfully loaded
-        else: 
+        else:
+            print("No save to load")
             return False    # No file to load
 
     def ad_class(self, link):

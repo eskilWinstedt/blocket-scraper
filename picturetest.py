@@ -9,7 +9,6 @@ html = urllib.request.urlopen(request)
 soup =  BeautifulSoup(html, 'html.parser')
 
 pictureboxes = soup.findAll('div', attrs={'class': 'LoadingAnimationStyles__PlaceholderWrapper-c75se8-0 jkleoR'})
-
 pictureboxes = pictureboxes[-1]
 
 pictureboxes = pictureboxes.findChild()
