@@ -130,7 +130,8 @@ class Ad:
     
     def set_title(self):
         '''Sets the title of the ad if it's identified'''
-        title = self.soup.find('div', attrs={'class': 'TextHeadline1__TextHeadline1Wrapper-sc-18mtyla-0'})
+        title = self.soup.find('h1', attrs={'class': 'Hero__StyledSubject-sc-1mjgwl-4'})
+        print(title)
         if title:
             self.title = title.string
     
@@ -219,7 +220,8 @@ class Ad:
     def __repr__(self):
         width = 100
         print('\n')
-        print('----' + self.title + '-' * (width - 4 - len(self.title)))
+        title = str(self.title)
+        print('----' + title + '-' * (width - 4 - len(title)))
         print(self.printable_line('Price: ' + str(self.price), width))
         print(self.printable_line('Description: ' + str(self.description), width))
         print(self.printable_line('Location: ' + str(self.location), width))
@@ -237,7 +239,7 @@ class Car_ad(Ad):
         Fueltype
         transmission
         mileage
-        modelyear
+        model year
         bodytype
         drive
         horsepower
@@ -330,7 +332,6 @@ class Monitored_category:
                 self.ads[ad_id].archive()
             except KeyError:
                 print("This ad was removed during this and the most recent session. No data has been saved and, therefore, the ad can not be archived.")
-
 
     def save(self):
         '''Save active_ad_links and removed_ad_links. It does not save the actuall ads'''
