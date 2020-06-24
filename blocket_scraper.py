@@ -5,19 +5,50 @@ from bs4 import BeautifulSoup
 import time
 import mysql.connector
 
+'''
+TO DO:
+  bug: Only the last page is fetched atm.
+  Test the refresh_ads method.
+  Add an option to fetch within the refresh_ads method.
+  Clear up some unimportant debugging messages
+'''
+
+
 # --- OPTIONS ---------------------
 DEBUG_MODE = True
 
+
+if DEBUG_MODE:
+    from inspect import currentframe, getframeinfo
+
+
 # ------ DATABASE CONFIGURATION CONSTANTS --------------------
+
+
 DB_NAME = "blocket_scraper"
 DB_HOST = "localhost"
 DB_USER = "root"
 DB_PASSWD = "ANC:s viktiga partikongress"
 
-def debug(msg):
+def debug(msg, display_line_nr = False):
     global DEBUG_MODE
-    if DEBUG_MODE:
+    if not DEBUG_MODE: return
+    if display_line_nr:
+        line_nr = getframeinfo(currentframe()).lineno
+        print("{0}: {1}".format(line_nr, msg))
+    else:
         print(msg)
+
+def warning(msg):
+    global DEBUG_MODE
+    if not DEBUG_MODE: return
+    line_nr = getframeinfo(currentframe()).lineno
+    print("A WARNING HAS BEEN RAISED ON LINE {0} WITH THE MESSAGE: {1}".format(line_nr, msg))
+
+def get_ad_id(ad_link):
+    '''Gets the unique ad id from the ad link '''
+    return int(ad_link.split('/')[-1].split('.')[0])
+
 
 class MonitoredCategory:
     def __init__(self, url):
@@ -26,7 +57,8 @@ class MonitoredCategory:
         self.headers = {}
         self.categories = []
         self.table = ""     # The name of the SQL table
-        self.ads = {}
+        self.ad_ids = []
+        self.active_ad_links = []
 
         self._fetch_all()
         self._get_categories()
@@ -90,46 +122,49 @@ class MonitoredCategory:
         else:
             # TRY TO LOAD DATA FROM IT!!!
             db_cursor.execute("SELECT url, ad_id FROM {0} WHERE archived = false".format(self.table))
-            debug(db_cursor)
             for data in db_cursor:
-                debug(data)
+                self.active_ad_links.append(data[0])
+                self.ad_ids.append(data[1])
+            debug(self.active_ad_links)
+            debug(self.ad_ids)
 
     def refresh_ads(self, fetch=True):
         '''Finds new ads and saves them to the DB and updates newly archived ads'''
-        '''self.new_ad_links = []
-        self.newly_removed_ad_links = self.active_ad_links.copy()        # Deleting all found links until only the removed ones remain
+        new_ad_links = []
+        removed_ad_links = self.active_ad_links.copy()       # Deleting all found links until only the removed ones remain
+
+
         for page_soup in self.page_soups:
-            # Loop over every ad container
-            for ad in page_soup.findAll('div', attrs={'class': 'styled__Wrapper-sc-1kpvi4z-0'}):
-                if ad['to'] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
-                    self.newly_removed_ad_links.remove(ad['to'])        
+            for ad in page_soup.findAll("div", attrs={"class": "styled__Wrapper-sc-1kpvi4z-0"}):                    # Loop over every ad container
+                debug("YES " + ad["to"])
+                if ad["to"] in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
+                    debug("Removing already found ad" + ad["to"])
+                    removed_ad_links.remove(ad["to"])
                 else:   # The ad is new or has changed name
-                    self.active_ad_links.append(ad['to'])
-                    self.new_ad_links.append(ad['to'])
-                    ad_id = get_ad_id(ad['to'])
-                    if ad_id in selgit f.ads:   # The ad already exists?
-                        # Update the ad so the new name will be saved!
-                        print('THE AD NAME HAS BEEN CHANGED')
-                        self.ads[ad_id].update()
+                    self.active_ad_links.append(ad["to"])
+                    new_ad_links.append(ad["to"])
+                    ad_id = get_ad_id(ad["to"])
+                    if ad_id in self.ad_ids:   # The ads titel (and maybe more) has been changed
+                        debug("THE AD NAME HAS BEEN CHANGED")
+                        warning("UPDATE THE AD IN THE DATABASE")
+                        #self.ad_ids[ad_id].update()
                     else:
-                        print('This ad is new')
-                        print('Ad id: ' + ad_id)
-                        self.ads[ad_id] = self.ad_class(ad['to'])  # Using different classes for the ads depending on their categories
-                        print(str(self.ad_class(ad['to']).url))
-                        print(len(self.ads))
-        print('Nu är jag här')
-        for key in self.ads:
-            self.ads[key].__repr__()
-        self.removed_ad_links += self.newly_removed_ad_links
-        for removed_link in self.newly_removed_ad_links:        # Remove removed_links from active_links
-            print('Removed ' + removed_link)
-            self.active_ad_links.remove(removed_link)
-            ad_id = get_ad_id(removed_link)
-            try:
-                self.ads[ad_id].archive()
-            except KeyError:
-                print("This ad was removed during this and the most recent session. No data has been saved and, therefore, the ad can not be archived.")'''
-        pass
+                        debug("New ads id: " + str(ad_id))
+                        self.active_ad_links.append(ad["to"])
+                        self.ad_ids.append(int(ad_id))
+                        warning("INSERT THE AD INTO THE DATABASE")
+                        #self.ad_ids[ad_id] = self.ad_class(ad["to"])  # Using different classes for the ads depending on their categories
+                        debug("Active ad ids: {0}".format(len(self.ad_ids)))
+                debug(removed_ad_links)
+        
+        debug("Reached", True)
+        for removed_ad_link in removed_ad_links:        # Remove removed_links from active_links
+            debug('Removed ' + removed_ad_link)
+            self.active_ad_links.remove(removed_ad_link)
+            ad_id = get_ad_id(removed_ad_link)
+            debug('Removed ad id: ' + str(ad_id))
+            self.ad_ids.remove(ad_id)
+            warning("UPDATE THE AD IN THE DATABASE SO ARCHIVED = true")
 
     def _save_ad(self, url):
         '''Saves an ad from its URL in the table located by the ads categories'''
@@ -163,3 +198,5 @@ db_cursor.execute("USE {0}".format(DB_NAME))
 headers = {}
 headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
 bugs = MonitoredCategory('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020')
+
+input('exit')
