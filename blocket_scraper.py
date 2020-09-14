@@ -7,13 +7,11 @@ import urllib.request
 from urllib.parse import urlparse
 
 
-
 '''
 TO DO:
+    Add archive method
     Test timestamp method
-    Add update to update method 
     Add a smart table creator depending on the search querys category
-    Write load ads method
     Fix Null values in db
 '''
 
@@ -67,7 +65,6 @@ class Ad:
         self.title = None
         self.price = None
         self.description = None
-        self.picture_ids = []
 
         debug("An Ad instance is initialised")
         #self.update()
@@ -81,7 +78,8 @@ class Ad:
         '''Fetches the an Ad and creates a soup'''
         while True:
             try:
-                request = urllib.request.Request(self.url)
+                absolute_ad_link = 'https://beta.blocket.se' + self.url
+                request = urllib.request.Request(absolute_ad_link)
                 html = urllib.request.urlopen(request)
                 self.soup = BeautifulSoup(html, 'html.parser')
                 break
@@ -131,7 +129,6 @@ class Ad:
             link = link[:end_index]
 
             picture_id = get_ad_id(link)
-            self.picture_ids.append(picture_id)
             filepath = folder + str(self.id) + '_' + str(picture_id) + '.jpg'
             if os.path.isfile(filepath): continue   # The picture is already downloaded
             while True:
@@ -147,8 +144,6 @@ class Ad:
                     print("An error occured during ad fetching and filesaving. Retrying in 30 seconds")
                     print("Exception: " + str(e))
                     time.sleep(30)
-        self.picture_ids = str(self.picture_ids).replace(" ", "")
-        debug(self.picture_ids)
 
     def _get_price(self):
         '''Sets the price of and ad if it's specified'''
@@ -273,30 +268,26 @@ class Ad:
         debug(self.url)
         debug(self.id)
 
-        sql = "INSERT INTO {0} (url, ad_id, titel, timestamp, location, price, description, pictures) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)".format(self.db_table)
-        values = (self.url, self.id, self.title, int(self.timestamp), self.location, self.price, self.description, self.picture_ids)
+        #Check existance
+        sql = "SELECT COUNT(1) FROM {0} WHERE ad_id=%s;".format(self.db_table)
+        value = (self.id,)
+        db_cursor.execute(sql, value)
 
-        for i, e in enumerate(values):
-            debug("{0}: {1}, {2}".format(i, e, type(e)))
-        debug(sql % values)        
+        for data in db_cursor:
+            if data[0] == True: break
+            # The data is new
+            sql = "INSERT INTO {0} (url, ad_id, title, timestamp, location, price, description) VALUES (%s,%s,%s,%s,%s,%s,%s)".format(self.db_table)
+            values = (self.url, self.id, self.title, int(self.timestamp), self.location, self.price, self.description)
+            
+            db_cursor.execute(sql, values)
+            db.commit()
+            return
 
+        #The data needs to be updated
+        sql = "UPDATE {0} SET url = %s, title = %s, location = %s, price = %s, description = %s WHERE ad_id = %s;".format(self.db_table)
+        values = (self.url, self.title, self.location, self.price, self.description, self.id)
         db_cursor.execute(sql, values)
         db.commit()
-
-
-        '''db_cursor.execute("SELECT COUNT(1) FROM {0} WHERE ad_id = {1}".format(self.db_table, self.id))
-        exists = False
-        
-        for msg in db_cursor:
-            if debug(msg[0]) == 1:
-                exists = True
-                break'''
-        
-        
-
-        '''db_cursor.execute("UPDATE `blocket_scraper`.`fordon_bilar_volkswagen_bubbla` SET `url` = \"{0}\" WHERE `ad_id` = {1};".format(self.url, self.id))
-        for data in db_cursor:
-            debug(data)'''
 
 
 class MonitoredCategory:
@@ -317,12 +308,12 @@ class MonitoredCategory:
 
     def _ad_class(self, link, id):
         '''Depending on the category this class is searching in, different classes will be used for the ads'''
-        absolute_ad_link = 'https://beta.blocket.se' + link
+        #absolute_ad_link = 'https://beta.blocket.se' + link
         if False:
             pass
         else:
-            print('absolute ad link: ' + absolute_ad_link)
-            return Ad(absolute_ad_link, id, self.db_table)     # Returns the instance reference
+            #print('absolute ad link: ' + absolute_ad_link)
+            return Ad(link, id, self.db_table)     # Returns the instance reference
 
     def _fetch(self, url):
         '''Takes an url to a page as the argument, fetches the page and returns it as a soup'''
@@ -370,6 +361,7 @@ class MonitoredCategory:
             for ad in page_soup.findAll("div", attrs={"class": "styled__Wrapper-sc-1kpvi4z-0"}):      # Loop over every ad container
                 ad_link = ad["to"]
                 debug("Currently processing: " + ad_link)
+                
                 if ad_link in self.active_ad_links:       # Attribute 'to' is the relative link to the ad
                     debug("Removing already found ad " + ad_link)
                     removed_ad_links.remove(ad_link)
@@ -377,7 +369,7 @@ class MonitoredCategory:
                     self.active_ad_links.append(ad_link)
                     new_ad_links.append(ad_link)
                     ad_id = get_ad_id(ad_link)
-                    if ad_id in self.ad_ids:   # The ads titel (and likely more) has been changed
+                    if ad_id in self.ad_ids:   # The ads title (and likely more) has been changed
                         debug("THE AD NAME HAS BEEN CHANGED")
                         warning("UPDATE THE AD IN THE DATABASE")
                         ad_instance = self._ad_class(ad_link, ad_id)
@@ -419,33 +411,17 @@ class MonitoredCategory:
 
         if missing:
             debug("Created table " + self.db_table)
-            # All columns are based on blocket's limits plus extra bytes for >1 byte chars. Room for 30 picture ids
-            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, titel VARCHAR(70), timestamp VARCHAR(30), archived VARCHAR(30), location VARCHAR(80), price INT, description VARCHAR(4000), pictures VARCHAR(331)"
+            # All columns are based on blocket's limits plus extra bytes for >1 byte chars
+            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, title VARCHAR(70), timestamp VARCHAR(30), archived VARCHAR(30), location VARCHAR(80), price INT, description VARCHAR(4000)"
             db_cursor.execute("CREATE TABLE {0} ({1})".format(self.db_table, columns))
         else:
-            # TRY TO LOAD DATA FROM IT!!!
+            # Load data from it
             db_cursor.execute("SELECT url, ad_id FROM {0} WHERE archived IS NULL".format(self.db_table))
             for data in db_cursor:
                 self.active_ad_links.append(data[0])
                 self.ad_ids.append(data[1])
             debug(self.active_ad_links)
             debug(self.ad_ids)
-
-        
-
-    '''def _save_ad(self, url):
-        ''''''Saves an ad from its URL in the table located by the ads categories''''''
-        pass
-        # 1. Fetch all standard data
-
-        # Set class.
-        # Run methods inside class depending on operation
-        # Destroy instance 
-
-
-
-        # 2. Fetch other data depending on the ads table/categories (same result)
-        # 3. See if the ad has an earlier record. Update or insert?'''
 
 
 # --- MAIN ---------------
@@ -458,11 +434,6 @@ db = mysql.connector.connect(
 )
 
 db_cursor = db.cursor(buffered=True)
-
-'''for database in db_cursor:
-    if database[0] == DB_NAME:
-        exists = True
-        break'''
 
 db_cursor.execute("CREATE DATABASE IF NOT EXISTS {0}".format(DB_NAME))
 
