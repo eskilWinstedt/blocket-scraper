@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 
 '''
 TO DO:
-    Add archive method
-    Test timestamp method
+    Fix date/time in database
+        Make timestamp method fit db
     Add a smart table creator depending on the search querys category
     Fix Null values in db
 '''
@@ -60,19 +60,24 @@ class Ad:
         self.id = id
         self.db_table = db_table
         self.timestamp = None
-        self.removed_timestamp = None
         self.location = None
         self.title = None
         self.price = None
         self.description = None
 
         debug("An Ad instance is initialised")
-        #self.update()
 
     def archive(self):
         '''Records the remove timestamp to see when the ad was removed'''
-        print("An ad has been removed!")
-        self.removed_timestamp = time.localtime()
+        debug("An ad has been archived in db!")
+        removed_timestamp = time.localtime()
+        debug(type(removed_timestamp))
+
+        # The archived time is inserted
+        sql = "UPDATE {0} SET archived = %s WHERE ad_id = %s;".format(self.db_table)
+        values = (removed_timestamp, self.id)
+        db_cursor.execute(sql, values)
+        db.commit()
 
     def _fetch(self):
         '''Fetches the an Ad and creates a soup'''
@@ -390,7 +395,8 @@ class MonitoredCategory:
             ad_id = get_ad_id(removed_ad_link)
             debug('Removed ad id: ' + str(ad_id))
             self.ad_ids.remove(ad_id)
-            warning("UPDATE THE AD IN THE DATABASE SO ARCHIVED = true")
+            ad_instance = self._ad_class(removed_ad_link, ad_id)
+            ad_instance.archive()
 
     def _set_table_name(self):
         '''Gets the MySQL table from the categories'''
