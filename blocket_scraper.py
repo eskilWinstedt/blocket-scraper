@@ -16,6 +16,7 @@ TO DO:
 '''
 
 
+
 # --- OPTIONS ---------------------
 DEBUG_MODE = True
 
@@ -418,7 +419,7 @@ class MonitoredCategory:
         if missing:
             debug("Created table " + self.db_table)
             # All columns are based on blocket's limits plus extra bytes for >1 byte chars
-            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, title VARCHAR(70), timestamp VARCHAR(30), archived VARCHAR(30), location VARCHAR(80), price INT, description VARCHAR(4000)"
+            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, title VARCHAR(70), timestamp VARCHAR(30), archived DATETIME(0), location VARCHAR(80), price INT, description VARCHAR(4000)"
             db_cursor.execute("CREATE TABLE {0} ({1})".format(self.db_table, columns))
         else:
             # Load data from it
