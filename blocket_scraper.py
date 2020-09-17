@@ -9,13 +9,9 @@ from urllib.parse import urlparse
 
 '''
 TO DO:
-    Fix date/time in database
-        Make timestamp method fit db
+    Add varchar in db for fact-window information
     Add a smart table creator depending on the search querys category
-    Fix Null values in db
 '''
-
-
 
 # --- OPTIONS ---------------------
 DEBUG_MODE = True
@@ -72,7 +68,6 @@ class Ad:
         '''Records the remove timestamp to see when the ad was removed'''
         debug("An ad has been archived in db!")
         removed_timestamp = time.localtime()
-        debug(type(removed_timestamp))
 
         # The archived time is inserted
         sql = "UPDATE {0} SET archived = %s WHERE ad_id = %s;".format(self.db_table)
@@ -179,83 +174,82 @@ class Ad:
         print(self.printable_line('Price: ' + str(self.price), width))
         print(self.printable_line('Description: ' + str(self.description), width))
         print(self.printable_line('Location: ' + str(self.location), width))
-        print(self.printable_line('Inlagd: ' + str(time.ctime(self.timestamp)), width))
+        print(self.printable_line('Inlagd: ' + str(time.asctime(self.timestamp)), width))
         print('-' * width)
         print('\n')
 
     def _set_timestamp(self):
             '''Takes a timestamp from blocket in these formats: Idag 13:57 / Igår 03:34 / 
-            I måndags hh:mm / 31 maj hh::m / 9 nov. 14:57.  Converts to time in seconds if a timestamp is identified'''
+            I måndags hh:mm / 31 maj hh::m / 9 nov. 14:57.  Converts to a timestruct'''
+            now = time.localtime()
+            weekday_now = now.tm_wday
+
+            blocket_days = ('i måndags', 'i tisdags', 'i onsdags', 'i torsdags', 'i fredags', 'i lördags', 'i söndags')
+            blocket_months = ('jan.', 'feb.', 'mars', 'apr.', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.')
 
             # Fetch the timestamp and convert to string
-            raw_timestamp = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
-            raw_timestamp = self._soup_replace(raw_timestamp, 'Inlagd: <!-- -->')
-            raw_timestamp = raw_timestamp.string
+            timestamp_raw = self.soup.find('span', attrs={'class': 'PublishedTime__StyledTime-pjprkp-1'})
+            timestamp_raw = self._soup_replace(timestamp_raw, 'Inlagd: <!-- -->')
+            timestamp_raw = timestamp_raw.string
 
-            timestamp_parts = raw_timestamp.split(' ')      # example: ['21', 'okt', '04:39]
-            # Clock (hh:mm)
-            clock = timestamp_parts[-1]     # '04:39'
-            clock = clock.split(':')    # ['04', '39']
-            clock = list(map(int, clock))   # [4, 39]
-            debug("clock: " + str(clock))
+            timestamp_split = timestamp_raw.split(" ")
+            clock = timestamp_split[-1]
+            clock = clock.split(":")
+            hour = int(clock[0])
+            minute = int(clock[1])
+            year_day = now.tm_yday
+            year = now.tm_year 
+            
+            if "idag" in timestamp_split or "igår" in timestamp_split:
+                if "igår" in timestamp_split:
+                    year_day -= 1
+                    if year_day <= 0:   # year_day = 0 => last day of previous year
+                        year -= 1
+                        year_days = 365
+                        if year % 4 == 0:   # Leap year?
+                            year_days += 1
+                        year_day += year_days
+                self.timestamp = time.strptime("{0}:{1} {2} {3}".format(hour, minute, year_day, year), "%H:%M %j %Y")
+                return
 
-            # Current times
-            seconds_now = time.time()  # Tinme since beginning of time in seconds
-            time_now = time.localtime()   # A tuple with year, month, day, weekday etc.
-            clock_now_seconds = time_now[3] * 3600 + time_now[4] * 60 + time_now[5]
-            weekday_now = time_now[6]   # Weekday in numbers. Monday is 0
-            
-            seconds_now_no_clock = seconds_now - clock_now_seconds
-            timestamp = seconds_now_no_clock + clock[0] * 3600 + clock[1] * 60 # Adding the hours and minutes from the ad
-            
-            blocket_days = ['i måndags', 'i tisdags', 'i onsdags', 'i torsdags', 'i fredags', 'i lördags', 'i söndags']
-            blocket_months = ['jan.', 'feb.', 'mars', 'apr.', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.']
-            
-            if 'idag' in  raw_timestamp:    
-                self.timestamp = timestamp
-            elif 'igår' in raw_timestamp:
-                self.timestamp = timestamp - 3600 * 24
-            else:
-                # Check for day
-                for weekday_then, blocket_day in enumerate(blocket_days):
-                    if blocket_day in raw_timestamp:
-                        if weekday_now > weekday_then:
-                            days_since = weekday_now - weekday_then
-                        else:
-                            days_since = weekday_now - weekday_then + 7  
-                                              
-                        seconds_since = 3600 * 24 * days_since
-                        self.timestamp = timestamp - seconds_since
-                        debug("Blocket timestamp: {0}. Converted timestamp: {1}".format(raw_timestamp, str(time.ctime(self.timestamp))))
-                        return
+            # Weekday
+            for weekday_then, blocket_day in enumerate(blocket_days):
+                if blocket_day not in timestamp_raw: continue
                 
-                # Check for month
-                for month_index, blocket_month in enumerate(blocket_months):
-                    debug("Month index: " + str(month_index))
-                    debug("Blocket index: " + blocket_month)
-                    if blocket_month in raw_timestamp:
-                        month_number = month_index + 1
-                        timestamp_parts[0] = int(timestamp_parts[0])
-                        year = time_now.tm_year
-                        debug("Month number now: " + str(time_now.tm_mon))
-                        debug("Blocket time month number: " + str(month_number))
-                        if month_number > time_now.tm_mon:
-                            year -= 1
-                        elif timestamp_parts[0] > time_now.tm_mday:
-                            year -= 1
-                            # There are no blocket ads close to one year old!
-                            print('WARNING!')
-                            print('This blocket date was older than expected: ' + raw_timestamp)
-                        
-                        month_day = timestamp_parts[0]
-                        time_tuple = (year, month_number, month_day, clock[0], clock[1], 0, 0, 1, -1) # year, month, month_day, hours, minutes, seconds, week_day, year_day, daylight_savings (-1=auto).  Week_day and year_day doesn't make any difference 
-                        self.timestamp = time.mktime(time_tuple)
-                        debug("Blocket timestamp: {0}. Converted timestamp: {1}".format(raw_timestamp, str(time.ctime(self.timestamp))))
-                        return
-                
-                # The timestamp could not be set
-                print('AN error has occurred.')
-                print('This blocket date was not recognized: ' + raw_timestamp)
+                delta_days = weekday_then - weekday_now
+                if delta_days >= 0:
+                    delta_days -= 7
+
+                year_day += delta_days
+                if year_day <= 0:      
+                    year -= 1
+                    year_days = 365
+                    if year % 4 == 0:
+                        year_days += 1
+                    year_day += year_days
+                self.timestamp = time.strptime("{0}:{1} {2} {3}".format(hour, minute, year_day, year), "%H:%M %j %Y")
+                return
+            
+            # Month day and month
+            month_day = int(timestamp_split[0])
+            month = timestamp_split[1]
+            month_number = blocket_months.index(month) + 1
+
+            # Has the datetime not occured yet this year? 
+            if month_number > now.tm_mon:
+                year -= 1
+            elif month_number == now.tm_mon:
+                if month_day > now.tm_mday:
+                    year -= 1
+                elif month_day == now.tm_mday:
+                    if hour > now.tm_hour:
+                        year -= 1
+                    elif hour == now.tm_hour and minute > (now.tm_min + 3):     # Adding a bit of margin in case the system clock is out of tune with Blockets' servers
+                        year -= 1
+
+
+            self.timestamp = time.strptime("{0}:{1} {2} {3} {4}".format(hour, minute, month_day, month_number, year), "%H:%M %d %m %Y")
+            return
 
     def _soup_replace(self, soup, remove, replace = ''):
         '''Removes and replaces a given combination of characters in a soup'''
@@ -283,7 +277,7 @@ class Ad:
             if data[0] == True: break
             # The data is new
             sql = "INSERT INTO {0} (url, ad_id, title, timestamp, location, price, description) VALUES (%s,%s,%s,%s,%s,%s,%s)".format(self.db_table)
-            values = (self.url, self.id, self.title, int(self.timestamp), self.location, self.price, self.description)
+            values = (self.url, self.id, self.title, self.timestamp, self.location, self.price, self.description)
             
             db_cursor.execute(sql, values)
             db.commit()
@@ -419,7 +413,7 @@ class MonitoredCategory:
         if missing:
             debug("Created table " + self.db_table)
             # All columns are based on blocket's limits plus extra bytes for >1 byte chars
-            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, title VARCHAR(70), timestamp VARCHAR(30), archived DATETIME(0), location VARCHAR(80), price INT, description VARCHAR(4000)"
+            columns = "url VARCHAR(255), ad_id INT PRIMARY KEY, title VARCHAR(70), timestamp DATETIME(0), archived DATETIME(0), location VARCHAR(80), price INT, description VARCHAR(4000)"
             db_cursor.execute("CREATE TABLE {0} ({1})".format(self.db_table, columns))
         else:
             # Load data from it
@@ -441,13 +435,12 @@ db = mysql.connector.connect(
 )
 
 db_cursor = db.cursor(buffered=True)
-
 db_cursor.execute("CREATE DATABASE IF NOT EXISTS {0}".format(DB_NAME))
-
 db_cursor.execute("USE {0}".format(DB_NAME))
 
-headers = {}
-headers['User-Agent'] = 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:48.0) Gecko/20100101 Firefox/48.0'
 bugs = MonitoredCategory('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020')
 
-input('exit')
+update_timer = 60 * 7
+while True:
+    bugs.refresh_ads()
+    time.sleep(update_timer)
