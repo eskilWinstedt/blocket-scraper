@@ -353,8 +353,10 @@ class MonitoredCategory:
         if fetch:
             self._fetch_all()
         
-        new_ad_links = []
         removed_ad_links = self.active_ad_links.copy()       # Deleting all found links until only the removed ones remain
+
+        debug("removed_ad_links before:")
+        debug(removed_ad_links)
 
 
         for page_soup in self.page_soups:
@@ -367,7 +369,6 @@ class MonitoredCategory:
                     removed_ad_links.remove(ad_link)
                 else:   # The ad is new or has changed name
                     self.active_ad_links.append(ad_link)
-                    new_ad_links.append(ad_link)
                     ad_id = get_ad_id(ad_link)
                     if ad_id in self.ad_ids:   # The ads title (and likely more) has been changed
                         debug("THE AD NAME HAS BEEN CHANGED")
@@ -375,16 +376,19 @@ class MonitoredCategory:
                         ad_instance = self._ad_class(ad_link, ad_id)
                         ad_instance.update()
                     else:
+                        debug("Ad's url {0}".format(ad_link))
                         debug("New ad's id: " + str(ad_id))
-                        self.active_ad_links.append(ad_link)
                         self.ad_ids.append(int(ad_id))
                         ad_instance = self._ad_class(ad_link, ad_id)
                         ad_instance.update()
                         debug("Active ad ids: {0}".format(len(self.ad_ids)))
         
+        debug("removed_ad_links after:")
+        debug(removed_ad_links)
+
         debug("\n\nAll ads have been fetched\n\n")
         
-        for removed_ad_link in removed_ad_links:        # Remove removed_links from active_links
+        for removed_ad_link in removed_ad_links:        # Remove removed_links from active_links       91428621                 91939772        91968765
             debug('Removed ' + removed_ad_link)
             self.active_ad_links.remove(removed_ad_link)
             ad_id = get_ad_id(removed_ad_link)
@@ -438,9 +442,13 @@ db_cursor = db.cursor(buffered=True)
 db_cursor.execute("CREATE DATABASE IF NOT EXISTS {0}".format(DB_NAME))
 db_cursor.execute("USE {0}".format(DB_NAME))
 
-bugs = MonitoredCategory('https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020')
+bugs = MonitoredCategory("https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=40&cbl1=17&cg=1020")
+#nineellevens = MonitoredCategory("https://www.blocket.se/annonser/hela_sverige/fordon/bilar?cb=29&cbl1=1&cg=1020&mye=1997")
 
 update_timer = 60 * 7
 while True:
+    input("loop again?")
+    #time.sleep(update_timer)
     bugs.refresh_ads()
-    time.sleep(update_timer)
+    #nineellevens.refresh_ads()
+    
